@@ -11,11 +11,17 @@ package plugin
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/apptainer/apptainer/e2e/internal/e2e"
 	"github.com/apptainer/apptainer/e2e/internal/testhelper"
+	"github.com/apptainer/apptainer/internal/pkg/buildcfg"
+	"github.com/google/uuid"
+	"golang.org/x/sys/unix"
 )
 
 type ctx struct {
@@ -317,6 +323,127 @@ func (c ctx) testApptainerCallbacks(t *testing.T) {
 	}
 }
 
+// setupLogPluginConfig bind mounts a temporary directory over the plugins
+// configuration directory, holding a log-plugin config.yml that logs with tag
+// through a template with literal text between expressions.
+func (c ctx) setupLogPluginConfig(t *testing.T, tag string) (cleanup func(t *testing.T)) {
+	pluginsDir := filepath.Join(buildcfg.APPTAINER_CONFDIR, "plugins")
+	tmpDir := filepath.Join(c.env.TestDir, "log-plugin-conf")
+	created := false
+
+	e2e.Privileged(func(t *testing.T) {
+		confDir := filepath.Join(tmpDir, "apptainer.org", "log-plugin")
+		if err := os.MkdirAll(confDir, 0o755); err != nil {
+			t.Fatalf("while creating %s: %s", confDir, err)
+		}
+		config := "output:\n" +
+			"- name: e2e\n" +
+			"  type: syslog\n" +
+			"  tag: " + tag + "\n" +
+			"  template: e2e.tpl\n"
+		if err := os.WriteFile(filepath.Join(confDir, "config.yml"), []byte(config), 0o644); err != nil {
+			t.Fatalf("while writing config.yml: %s", err)
+		}
+		tpl := "e2e cmd={{.Command}} image={{.Image}}"
+		if err := os.WriteFile(filepath.Join(confDir, "e2e.tpl"), []byte(tpl), 0o644); err != nil {
+			t.Fatalf("while writing e2e.tpl: %s", err)
+		}
+
+		if err := os.Mkdir(pluginsDir, 0o755); err == nil {
+			created = true
+		} else if !os.IsExist(err) {
+			t.Fatalf("while creating %s: %s", pluginsDir, err)
+		}
+		if err := unix.Mount(tmpDir, pluginsDir, "", unix.MS_BIND, ""); err != nil {
+			t.Fatalf("while mounting %s to %s: %s", tmpDir, pluginsDir, err)
+		}
+	})(t)
+
+	return e2e.Privileged(func(t *testing.T) {
+		if err := unix.Unmount(pluginsDir, 0); err != nil {
+			t.Errorf("while unmounting %s: %s", pluginsDir, err)
+		}
+		if created {
+			os.Remove(pluginsDir)
+		}
+		os.RemoveAll(tmpDir)
+	})
+}
+
+// journalLines returns the messages logged to the journal under tag, waiting
+// for up to 10 seconds for the first to arrive.
+func journalLines(t *testing.T, tag string) (lines []string) {
+	e2e.Privileged(func(t *testing.T) {
+		for range 20 {
+			out, err := exec.Command("journalctl", "-t", tag, "-o", "cat", "--no-pager").Output()
+			if err != nil {
+				t.Fatalf("while running journalctl: %s", err)
+			}
+			if s := strings.TrimSpace(string(out)); s != "" {
+				lines = strings.Split(s, "\n")
+				return
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	})(t)
+	return lines
+}
+
+func (c ctx) testLogPlugin(t *testing.T) {
+	if fi, err := os.Stat("/dev/log"); err != nil || fi.Mode()&os.ModeSocket == 0 {
+		t.Skip("no syslog socket at /dev/log")
+	}
+	if _, err := exec.LookPath("journalctl"); err != nil {
+		t.Skip("journalctl not found")
+	}
+	e2e.EnsureImage(t, c.env)
+
+	pluginDir := "../log-plugin"
+	pluginName := "apptainer.org/log-plugin"
+	tag := "apptainer-e2e-" + uuid.NewString()
+
+	sifFile := filepath.Join(c.env.TestDir, "log-plugin.sif")
+	defer os.Remove(sifFile)
+
+	cleanup := c.setupLogPluginConfig(t, tag)
+	defer cleanup(t)
+
+	steps := []struct {
+		name    string
+		profile e2e.Profile
+		command string
+		args    []string
+	}{
+		{"Compile", e2e.UserProfile, "plugin compile", []string{"--out", sifFile, pluginDir}},
+		{"Install", e2e.RootProfile, "plugin install", []string{sifFile}},
+		{"Exec", e2e.UserProfile, "exec", []string{c.env.ImagePath, "true"}},
+		{"Uninstall", e2e.RootProfile, "plugin uninstall", []string{pluginName}},
+	}
+	for _, s := range steps {
+		c.env.RunApptainer(
+			t,
+			e2e.AsSubtest(s.name),
+			e2e.WithProfile(s.profile),
+			e2e.WithCommand(s.command),
+			e2e.WithArgs(s.args...),
+			e2e.ExpectExit(0),
+		)
+	}
+
+	// The whole template output must arrive as a single message.
+	want := "e2e cmd=exec image=" + c.env.ImagePath
+	lines := journalLines(t, tag)
+	count := 0
+	for _, l := range lines {
+		if l == want {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly one %q journal line for tag %s, got:\n%s", want, tag, strings.Join(lines, "\n"))
+	}
+}
+
 // E2ETests is the main func to trigger the test suite
 func E2ETests(env e2e.TestEnv) testhelper.Tests {
 	c := ctx{
@@ -329,5 +456,6 @@ func E2ETests(env e2e.TestEnv) testhelper.Tests {
 		"basic":               np(c.testPluginBasic),
 		"CLI_callbacks":       np(c.testCLICallbacks),
 		"Apptainer_callbacks": np(c.testApptainerCallbacks),
+		"log_plugin":          np(c.testLogPlugin),
 	}
 }
