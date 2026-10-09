@@ -1,0 +1,6 @@
+output:
+- name: System logger
+  type: syslog
+  tag: singularity
+  facility: authpriv
+  template: default.tpl
