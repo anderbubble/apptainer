@@ -92,14 +92,14 @@ rebuild-rpm:
 	@echo " BUILD RPM"
 	$(V)(set -x; cd $(SOURCEDIR) && \
 	  if [ -n "$(RPMPREFIX)" ]; then \
-	    rpmbuild $(RPMCLEAN) -ta \
+	    rpmbuild $(RPMCLEAN) $(RPMBUILD_OPTS) -ta \
 	      --define '_prefix $(RPMPREFIX)' \
 	      --define '_sysconfdir $(RPMPREFIX)/etc' \
 	      --define '_localstatedir $(RPMPREFIX)/var' \
 	      --define '_mandir $(RPMPREFIX)/share/man' \
 	      $(SOURCEDIR)/apptainer-$(VERSION).tar.gz; \
 	  else \
-	    rpmbuild $(RPMCLEAN) -ta \
+	    rpmbuild $(RPMCLEAN) $(RPMBUILD_OPTS) -ta \
 	      $(SOURCEDIR)/apptainer-$(VERSION).tar.gz; \
 	  fi)
 

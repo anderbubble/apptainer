@@ -43,6 +43,11 @@ else
   dnf install -y sudo
 fi
 
+WITH_PLUGINS=false
+if [[ $RPMBUILD_OPTS == *"--with plugins"* ]]; then
+  WITH_PLUGINS=true
+fi
+
 # switch to an unprivileged user with sudo privileges
 useradd -u 1000 --create-home -s /bin/bash testuser
 echo "Defaults:testuser env_keep=DOCKER_HOST" >>/etc/sudoers
@@ -75,7 +80,7 @@ su testuser -c '
     # eliminate the "dist" part in the rpm name, for the release_assets
     echo "%dist %{nil}" >$HOME/.rpmmacros
   fi
-  make -C builddir '${BUILD_TYPE:-rpm}'
+  make -C builddir '${BUILD_TYPE:-rpm}' RPMBUILD_OPTS="'"$RPMBUILD_OPTS"'"
   if [[ '$OS_TYPE' == *suse* ]]; then
     sudo zypper install -y --allow-unsigned-rpm $HOME/rpmbuild/RPMS/*/*.rpm
   else
@@ -85,10 +90,16 @@ su testuser -c '
   export GOPATH=$BLD/gopath
   PATH=$GOPATH/bin:$PATH
 
+  if '$WITH_PLUGINS'; then
+    # the log-plugin package registers and enables the plugin
+    apptainer plugin list | grep "yes  apptainer.org/log-plugin"
+  fi
+
   # do a minimal test
   apptainer exec oras://ghcr.io/apptainer/alpine:3.15.0 /bin/true
 
-  if [[ '$OS_TYPE' != *suse* ]]; then
+  # plugin builds have no debugsource rpm
+  if [[ '$OS_TYPE' != *suse* ]] && ! '$WITH_PLUGINS'; then
     # make sure an example go source file is actually in the debugsource rpm 
     rpm2cpio $HOME/rpmbuild/RPMS/$(arch)/apptainer-debugsource*.rpm | cpio -it | grep cmd/apptainer/cli.go
   fi
