@@ -1,0 +1,70 @@
+// Copyright (c) Contributors to the Apptainer project, established as
+//   Apptainer a Series of LF Projects LLC.
+//   For website terms of use, trademark policy, privacy policy and other
+//   project policies see https://lfprojects.org/policies
+// Copyright (c) 2020-2026, Sylabs Inc. All rights reserved.
+// This software is licensed under a 3-clause BSD license. Please consult the
+// LICENSE.md file distributed with the sources of this project regarding your
+// rights to use or distribute this software.
+
+package main
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/apptainer/apptainer/internal/pkg/util/fs"
+	"gotest.tools/v3/assert"
+)
+
+func TestLoadConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	p := pluginImplementation{
+		configPath: tmpDir,
+	}
+
+	tests := map[string]error{
+		"valid-single":       nil,
+		"valid-multiple":     nil,
+		"valid-tag-facility": nil,
+		"invalid-empty":      ErrNoLogOutput,
+		"invalid-type":       ErrInvalidLogType,
+	}
+
+	for name, expected := range tests {
+		t.Run(name, func(t *testing.T) {
+			src := "testdata/config-" + name + ".yml"
+			dst := filepath.Join(tmpDir, "config.yml")
+			err := fs.CopyFile(src, dst, 0o644)
+			if err != nil {
+				t.Fatalf("Could not copy test config: %v", err)
+			}
+			defer os.Remove(dst)
+
+			err = p.loadConfig()
+
+			if expected == nil && err != nil {
+				t.Errorf("expected: %v, got: %v", expected, err)
+			}
+
+			if expected != nil && !errors.Is(err, expected) {
+				t.Errorf("expected: %v, got: %v", expected, err)
+			}
+		})
+	}
+}
+
+func TestLoadConfigTagFacility(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := fs.CopyFile("testdata/config-valid-tag-facility.yml", filepath.Join(tmpDir, "config.yml"), 0o644)
+	assert.NilError(t, err)
+
+	p := pluginImplementation{configPath: tmpDir}
+	assert.NilError(t, p.loadConfig())
+	assert.Equal(t, len(p.config.Output), 1)
+	assert.Equal(t, p.config.Output[0].Tag, "singularity")
+	assert.Equal(t, p.config.Output[0].Facility, "authpriv")
+}
