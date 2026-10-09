@@ -19,6 +19,8 @@ Changes since 1.5.x
   instead of the command name, they use the `user` facility instead of
   `kern`, and unset environment variables render as empty strings;
   each output can set its own `tag` and `facility`.
+- `apptainer plugin compile` now builds from the `vendor` directory of
+  release tarballs, so plugins can be compiled offline.
 - Add a new %{BUILDARCH} macro to the yum/dnf and zypper templates.
   It resolves to the architecture of the image currently being built.
 - Add support for mounting archive files (tar, tar.gz, etc.) using
