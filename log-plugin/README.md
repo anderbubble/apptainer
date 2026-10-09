@@ -34,6 +34,9 @@ sudo make uninstall
 make clean
 ```
 
+RPM packages built with `rpmbuild --with plugins` include an
+`apptainer-log-plugin` subpackage that installs and registers the plugin.
+
 ## Configuration
 
 Plugin configuration is placed in the `plugins/apptainer.org/log-plugin`

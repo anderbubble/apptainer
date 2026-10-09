@@ -19,6 +19,11 @@ Changes since 1.5.x
   instead of the command name, they use the `user` facility instead of
   `kern`, and unset environment variables render as empty strings;
   each output can set its own `tag` and `facility`.
+- Building the rpm with `--with plugins` produces a plugin-capable
+  `apptainer` and an `apptainer-log-plugin` subpackage that installs
+  and registers the plugin.  The `rpm` make target passes
+  `RPMBUILD_OPTS` to `rpmbuild`, e.g.
+  `make -C builddir rpm RPMBUILD_OPTS='--with plugins'`.
 - `apptainer plugin compile` now builds from the `vendor` directory of
   release tarballs, so plugins can be compiled offline.
 - Add a new %{BUILDARCH} macro to the yum/dnf and zypper templates.
