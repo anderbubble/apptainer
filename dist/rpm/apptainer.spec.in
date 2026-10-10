@@ -145,6 +145,10 @@ BuildRequires: libprotobuf-c-devel
 %if 0%{?suse_version} > 1600
 BuildRequires: libsubid-devel
 %endif
+%if 0%{?suse_version} < 1600 && "%{?archivemount_version}" != ""
+# archivemount-ng needs C++20, which the default gcc 7 on SLE 15 lacks
+BuildRequires: gcc11-c++
+%endif
 %else
 BuildRequires: shadow-utils-subid-devel
 BuildRequires: golang
@@ -243,6 +247,9 @@ if ! ./mlocal/scripts/check-min-go-version go $GOVERSION; then
 fi
 %endif
 
+%if "%{_target_vendor}" == "suse" && 0%{?suse_version} < 1600 && "%{?archivemount_version}" != ""
+export CXX=g++-11
+%endif
 ./scripts/compile-dependencies $(dirname %{SOURCE10})
 
 # Not all of these parameters currently have an effect, but they might be
