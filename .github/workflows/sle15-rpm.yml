@@ -1,0 +1,34 @@
+name: sle15-rpm
+on:
+  push:
+    branches:
+      - sle15-poc
+  workflow_dispatch:
+
+jobs:
+  rpmbuild-opensuse-leap-15-4:
+    name: rpmbuild-opensuse-leap-15.4
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Forks carry no release tags, which scripts/get-version needs
+      - name: Fetch upstream tags
+        run: git fetch --no-tags https://github.com/apptainer/apptainer.git 'refs/tags/v*:refs/tags/v*'
+
+      - name: Build and test rpm with plugins under docker
+        env:
+          OS_TYPE: registry.opensuse.org/opensuse/leap
+          OS_VERSION: "15.4"
+          GO_ARCH: linux-amd64
+          RPMBUILD_OPTS: --with plugins
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/ci-docker-run
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apptainer-leap15.4-x86_64-rpms
+          path: "*.rpm"
+          if-no-files-found: error
