@@ -178,6 +178,16 @@ func CompilePlugin(sourceDir, destSif, tmpDir string, buildTags string) error {
 	return nil
 }
 
+// goModFlag returns the go build -mod flag for building in srcDir. Release
+// tarballs carry a vendor directory, which apptainer itself was built from,
+// so use it when present to avoid needing module downloads.
+func goModFlag(srcDir string) string {
+	if _, err := os.Stat(filepath.Join(srcDir, "vendor", "modules.txt")); err == nil {
+		return "-mod=vendor"
+	}
+	return "-mod=readonly"
+}
+
 // buildPlugin takes sourceDir which is the string path the host which
 // contains the source code of the plugin. buildPlugin returns the path
 // to the built file, along with an error.
@@ -194,7 +204,7 @@ func buildPlugin(sourceDir string, bTool buildToolchain) (string, error) {
 		"build",
 		"-a",
 		"-o", out,
-		"-mod=readonly",
+		goModFlag(bTool.workPath),
 		"-ldflags", pluginRootDirVar,
 		"-trimpath",
 		"-buildmode=plugin",

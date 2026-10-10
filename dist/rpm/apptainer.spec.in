@@ -47,6 +47,13 @@
 # The last singularity version number in EPEL/Fedora
 %global last_singularity_version 3.8.7-3
 
+# Build with --with plugins for plugin support and the log-plugin subpackage
+%bcond_with plugins
+%if %{with plugins}
+# -trimpath, required for plugins, breaks debugsource generation
+%undefine _debugsource_packages
+%endif
+
 Summary: Application and environment virtualization formerly known as Singularity
 Name: apptainer
 Version: @PACKAGE_RPM_VERSION@
@@ -170,6 +177,10 @@ Recommends: fakeroot
 %else
 Requires: fakeroot
 %endif
+%if %{with plugins}
+# Distinguishes this build from one of the same version without plugin support
+Provides: %{name}(plugins) = %{version}-%{release}
+%endif
 
 %description
 Apptainer provides functionality to make portable
@@ -191,6 +202,15 @@ Requires: fuse3-libs >= 3.3.0
 
 %description suid
 Provides the optional setuid-root portion of Apptainer.
+
+%if %{with plugins}
+%package log-plugin
+Summary: Configurable syslog logging plugin for Apptainer
+Requires: %{name}(plugins) = %{version}-%{release}
+
+%description log-plugin
+Logs each apptainer command to syslog using configurable templates.
+%endif
 
 %prep
 %setup -n %{name}-%{package_version}
@@ -242,7 +262,11 @@ fi
         --mandir=%{_mandir} \
         --infodir=%{_infodir}
 
-%make_build -C builddir V= SUPPORT_PLUGINS= old_config=
+%make_build -C builddir V= %{!?with_plugins:SUPPORT_PLUGINS=} old_config=
+%if %{with plugins}
+# The uninstalled binary needs to be pointed at its generated config
+./builddir/%{name} -c builddir/%{name}.conf plugin compile log-plugin
+%endif
 
 %install
 %if "%{?SOURCE1}" != ""
@@ -277,6 +301,14 @@ install -m 755 PRoot-%{PRoot_version}/src/proot %{buildroot}%{_libexecdir}/%{nam
 %endif
 %if "%{?archivemount_version}" != ""
 install -m 755 archivemount-ng-%{archivemount_version}/archivemount %{buildroot}%{_libexecdir}/%{name}/bin/archivemount
+%endif
+
+%if %{with plugins}
+install -D -m 644 log-plugin/log-plugin.sif \
+    %{buildroot}%{_libexecdir}/%{name}/plugin-sif/log-plugin/log-plugin.sif
+install -d %{buildroot}%{_sysconfdir}/%{name}/plugins/apptainer.org/log-plugin
+install -m 644 log-plugin/config.yml log-plugin/*.tpl \
+    %{buildroot}%{_sysconfdir}/%{name}/plugins/apptainer.org/log-plugin/
 %endif
 
 %post
@@ -360,6 +392,9 @@ fi
 %{_libexecdir}/%{name}/lib
 %dir %{_sysconfdir}/%{name}
 %config(noreplace) %{_sysconfdir}/%{name}/*
+%if %{with plugins}
+%exclude %{_sysconfdir}/%{name}/plugins
+%endif
 %{_datadir}/bash-completion/completions/*
 %dir %{_sharedstatedir}/%{name}
 %dir %{_sharedstatedir}/%{name}/mnt
@@ -374,6 +409,34 @@ fi
 
 %files suid
 %attr(4755, root, root) %{_libexecdir}/%{name}/bin/starter-suid
+
+%if %{with plugins}
+%files log-plugin
+%dir %{_libexecdir}/%{name}/plugin-sif
+%dir %{_libexecdir}/%{name}/plugin-sif/log-plugin
+%{_libexecdir}/%{name}/plugin-sif/log-plugin/log-plugin.sif
+%dir %{_sysconfdir}/%{name}/plugins
+%dir %{_sysconfdir}/%{name}/plugins/apptainer.org
+%dir %{_sysconfdir}/%{name}/plugins/apptainer.org/log-plugin
+%config(noreplace) %{_sysconfdir}/%{name}/plugins/apptainer.org/log-plugin/*
+
+%pre log-plugin
+# On upgrade, deregister the old plugin; it won't load in the new apptainer
+if [ "$1" -gt 1 ]; then
+    %{_bindir}/%{name} plugin disable apptainer.org/log-plugin || :
+    %{_bindir}/%{name} plugin uninstall apptainer.org/log-plugin || :
+fi
+
+%post log-plugin
+%{_bindir}/%{name} plugin install \
+    %{_libexecdir}/%{name}/plugin-sif/log-plugin/log-plugin.sif
+
+%preun log-plugin
+if [ "$1" -eq 0 ]; then
+    %{_bindir}/%{name} plugin disable apptainer.org/log-plugin || :
+    %{_bindir}/%{name} plugin uninstall apptainer.org/log-plugin || :
+fi
+%endif
 
 %changelog
 

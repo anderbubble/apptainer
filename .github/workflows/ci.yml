@@ -289,6 +289,23 @@ jobs:
           TEST_TYPE: unpriv
         run: ./scripts/ci-docker-run
 
+  rpmbuild-rocky9-plugins:
+    name: rpmbuild-rocky9-plugins
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and test rpm with plugins under docker
+        env:
+          OS_TYPE: rockylinux
+          OS_VERSION: 9
+          GO_ARCH: linux-amd64
+          RPMBUILD_OPTS: --with plugins
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/ci-docker-run
+
   rpmbuild-rocky10:
     name: rpmbuild-rocky10
     runs-on: ubuntu-22.04

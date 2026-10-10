@@ -9,6 +9,23 @@ For older changes see the [archived Singularity change log](https://github.com/a
 
 Changes since 1.5.x
 
+- Add `log-plugin/`, a configurable logging plugin ported from
+  SingularityCE 4.6.0 that writes a syslog entry for each `apptainer`
+  command using Go templates.  It reads its `config.yml` and templates
+  from `plugins/apptainer.org/log-plugin/` under the Apptainer
+  configuration directory; SingularityCE configuration and template
+  files work unchanged.  Unlike SingularityCE, each template's output
+  is sent as a single syslog message, messages are tagged `apptainer`
+  instead of the command name, they use the `user` facility instead of
+  `kern`, and unset environment variables render as empty strings;
+  each output can set its own `tag` and `facility`.
+- Building the rpm with `--with plugins` produces a plugin-capable
+  `apptainer` and an `apptainer-log-plugin` subpackage that installs
+  and registers the plugin.  The `rpm` make target passes
+  `RPMBUILD_OPTS` to `rpmbuild`, e.g.
+  `make -C builddir rpm RPMBUILD_OPTS='--with plugins'`.
+- `apptainer plugin compile` now builds from the `vendor` directory of
+  release tarballs, so plugins can be compiled offline.
 - Add a new %{BUILDARCH} macro to the yum/dnf and zypper templates.
   It resolves to the architecture of the image currently being built.
 - Add support for mounting archive files (tar, tar.gz, etc.) using

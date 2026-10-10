@@ -413,6 +413,24 @@ step, for example:
 make -C builddir rpm RPMPREFIX=/opt/apptainer
 ```
 
+The rpms are built without plugin support by default. To build an
+`apptainer` that can load plugins, plus an `apptainer-log-plugin`
+subpackage containing the [log plugin](log-plugin/README.md), pass
+`--with plugins` to `rpmbuild`:
+
+```sh
+rpmbuild -tb --with plugins apptainer-${VERSION}.tar.gz
+```
+
+With the `rpm` make target, pass `rpmbuild` options in `RPMBUILD_OPTS`:
+
+```sh
+make -C builddir rpm RPMBUILD_OPTS='--with plugins'
+```
+
+Plugins have to be rebuilt for every new version of `apptainer`, and
+plugin builds have no debugsource rpm.
+
 For more information on installing/updating/uninstalling RPMs, check out our
 [admin docs](https://apptainer.org/docs/admin/main/admin_quickstart.html).
 

@@ -1,0 +1,6 @@
+output:
+- name: System logger
+  type: syslog
+  tag: apptainer
+  facility: user
+  template: default.tpl
